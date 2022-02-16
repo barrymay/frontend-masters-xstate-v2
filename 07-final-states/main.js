@@ -5,7 +5,11 @@ import { createMachine, assign, interpret, send } from 'xstate';
 import elements from '../utils/elements';
 import { raise } from 'xstate/lib/actions';
 import { formatTime } from '../utils/formatTime';
-
+import { inspect } from '@xstate/inspect';
+inspect({
+  iframe: false,
+  url: 'https://stately.ai/viz?inspect',
+});
 const playerMachine = createMachine({
   context: {
     title: undefined,
@@ -45,14 +49,18 @@ const playerMachine = createMachine({
                 PAUSE: { target: 'paused' },
               },
             },
+            
           },
           always: {
             cond: (ctx) => ctx.elapsed >= ctx.duration,
             // Instead of going to '#loading', this should go
             // to a sibling 'finished' state
-            target: '#loading',
+            target: 'finished',
           },
         },
+        finished: {
+          type: 'final'
+        }
         // Add a 'finished' final state here
       },
       onDone: {
@@ -136,7 +144,7 @@ const playerMachine = createMachine({
   },
 });
 
-const service = interpret(playerMachine).start();
+const service = interpret(playerMachine, {devTools: true}).start();
 window.service = service;
 
 elements.elPlayButton.addEventListener('click', () => {

@@ -5,6 +5,11 @@ import { raise } from 'xstate/lib/actions';
 import elements from '../utils/elements';
 import { formatTime } from '../utils/formatTime';
 
+inspect({
+  iframe: false,
+  url: 'https://stately.ai/viz?inspect',
+});
+
 const playerMachine = createMachine({
   initial: 'loading',
   context: {

@@ -5,8 +5,15 @@ import { createMachine, assign, interpret, send } from 'xstate';
 import elements from '../utils/elements';
 import { raise } from 'xstate/lib/actions';
 import { formatTime } from '../utils/formatTime';
+import { inspect } from '@xstate/inspect';
+
+inspect({
+  iframe: false,
+  url: "https://stately.ai/viz?inspect",
+});
 
 const playerMachine = createMachine({
+  type: 'parallel',
   context: {
     title: undefined,
     artist: undefined,
@@ -15,86 +22,97 @@ const playerMachine = createMachine({
     likeStatus: 'unliked', // or 'liked' or 'disliked'
     volume: 5,
   },
-
-  // Refactor this so that there are two parallel regions:
-  // 'player' and 'volume'
-  // The resulting state value should look like:
-  // {
-  //   player: 'loading',
-  //   volume: 'muted'
-  // }
-  initial: 'loading',
   states: {
-    // These states should be in a parent 'player' region
-    loading: {
-      id: 'loading',
-      tags: ['loading'],
-      on: {
-        LOADED: {
-          actions: 'assignSongData',
-          target: 'ready',
-        },
-      },
-    },
-    ready: {
-      initial: 'playing',
+    player: {
+      initial: 'loading',
+    
       states: {
-        paused: {
+        // These states should be in a parent 'player' region
+        loading: {
+          id: 'loading',
+          tags: ['loading'],
           on: {
-            PLAY: { target: 'playing' },
+            LOADED: {
+              actions: 'assignSongData',
+              target: 'ready',
+            },
           },
         },
-        playing: {
-          entry: 'playAudio',
-          exit: 'pauseAudio',
-          on: {
-            PAUSE: { target: 'paused' },
+        ready: {
+          initial: 'playing',
+          states: {
+            paused: {
+              on: {
+                PLAY: { target: 'playing' },
+              },
+            },
+            playing: {
+              entry: 'playAudio',
+              exit: 'pauseAudio',
+              on: {
+                PAUSE: { target: 'paused' },
+              },
+              always: {
+                cond: (ctx) => ctx.elapsed >= ctx.duration,
+                target: '#loading',
+              },
+            },
           },
-          always: {
-            cond: (ctx) => ctx.elapsed >= ctx.duration,
-            target: '#loading',
+        },
+    
+       
+      },
+      on: {
+        // These should belong to the 'player' region
+        SKIP: {
+          actions: 'skipSong',
+          target: '#loading',
+        },
+        LIKE: {
+          actions: 'likeSong',
+        },
+        UNLIKE: {
+          actions: 'unlikeSong',
+        },
+        DISLIKE: {
+          actions: ['dislikeSong', raise('SKIP')],
+        },
+        'AUDIO.TIME': {
+          actions: 'assignTime',
+        }
+    
+        
+      },
+    },
+    volume: {
+      initial: 'unmuted',
+      states: {
+  
+        // These states should be in a parent 'volume' region
+        unmuted: {
+          on: {
+            'VOLUME.TOGGLE': 'muted',
+          },
+        },
+        muted: {
+          on: {
+            'VOLUME.TOGGLE': 'unmuted',
           },
         },
       },
-    },
-
-    // These states should be in a parent 'volume' region
-    unmuted: {
       on: {
-        'VOLUME.TOGGLE': 'muted',
-      },
-    },
-    muted: {
-      on: {
-        'VOLUME.TOGGLE': 'unmuted',
-      },
-    },
-  },
-  on: {
-    // These should belong to the 'player' region
-    SKIP: {
-      actions: 'skipSong',
-      target: '#loading',
-    },
-    LIKE: {
-      actions: 'likeSong',
-    },
-    UNLIKE: {
-      actions: 'unlikeSong',
-    },
-    DISLIKE: {
-      actions: ['dislikeSong', raise('SKIP')],
-    },
-    'AUDIO.TIME': {
-      actions: 'assignTime',
-    },
+        // This should belong to the 'volume' region
+        VOLUME: {
+          cond: 'volumeWithinRange',
+          actions: 'assignVolume',
+        },
+      }
+    }
+  }
+ 
+  
 
-    // This should belong to the 'volume' region
-    VOLUME: {
-      cond: 'volumeWithinRange',
-      actions: 'assignVolume',
-    },
-  },
+  
 }).withConfig({
   actions: {
     assignSongData: assign({
@@ -132,7 +150,7 @@ const playerMachine = createMachine({
   },
 });
 
-const service = interpret(playerMachine).start();
+const service = interpret(playerMachine, {devTools: true}).start();
 window.service = service;
 
 elements.elPlayButton.addEventListener('click', () => {

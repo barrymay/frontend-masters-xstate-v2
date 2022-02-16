@@ -8,8 +8,12 @@ import { formatTime } from '../utils/formatTime';
 const playerMachine = createMachine({
   initial: 'loading',
   context: {
-    // Add initial context here for:
-    // title, artist, duration, elapsed, likeStatus, volume
+    title: undefined,
+    artist: undefined,
+    duration: undefined,
+    elapsed: undefined,
+    likeStatus: 'unliked',
+    volume: 50
   },
   states: {
     loading: {
@@ -26,6 +30,7 @@ const playerMachine = createMachine({
       },
     },
     playing: {
+      tags: ['playing'],
       entry: 'playAudio',
       exit: 'pauseAudio',
       on: {
@@ -56,7 +61,10 @@ const playerMachine = createMachine({
   },
 }).withConfig({
   actions: {
-    assignSongData: assign({
+    assignSongData: assign((_, event) => ({
+      ...event.data,
+      elapsed: 0,
+      likeStatus: 'unliked'
       // Assign the `title`, `artist`, and `duration` from the event.
       // Assume the event looks like this:
       // {
@@ -68,32 +76,43 @@ const playerMachine = createMachine({
       //   }
       // }
       // Also, reset the `elapsed` and `likeStatus` values.
-    }),
-    likeSong: assign({
+    })),
+    likeSong: assign(prevData => ({
+      ...prevData,
+      likeStatus: 'liked'
       // Assign the `likeStatus` to "liked"
-    }),
-    unlikeSong: assign({
-      // Assign the `likeStatus` to 'unliked',
-    }),
-    dislikeSong: assign({
-      // Assign the `likeStatus` to 'disliked',
-    }),
-    assignVolume: assign({
+    })),
+    unlikeSong: assign(prevData => ({
+      ...prevData,
+      likeStatus: 'unliked'
+      // Assign the `likeStatus` to "liked"
+    })),
+    dislikeSong: assign(prevData => ({
+      ...prevData,
+      likeStatus: 'disliked'
+      // Assign the `likeStatus` to "liked"
+    })),
+    assignVolume: assign((prevState, event) =>({
+      ...prevState,
+      volume: event.level
       // Assign the `volume` to the `level` from the event.
       // Assume the event looks like this:
       // {
       //   type: 'VOLUME',
       //   level: 5
       // }
-    }),
-    assignTime: assign({
-      // Assign the `elapsed` value to the `currentTime` from the event.
-      // Assume the event looks like this:
-      // {
-      //   type: 'AUDIO.TIME',
-      //   currentTime: 10
-      // }
-    }),
+    })),
+    assignTime: assign(
+      (prevState, event) =>({
+        ...prevState,
+        currentTime: event.currentTime
+        // Assign the `elapsed` value to the `currentTime` from the event.
+        // Assume the event looks like this:
+        // {
+        //   type: 'AUDIO.TIME',
+        //   currentTime: 10
+        // }
+    })),
     skipSong: () => {
       console.log('Skipping song');
     },
@@ -125,7 +144,9 @@ service.subscribe((state) => {
   console.log(state.context);
   const { context } = state;
 
-  elements.elLoadingButton.hidden = !state.hasTag('loading');
+
+
+  elements.elLoadingButton.hidden = !state.matches('loading');
   elements.elPlayButton.hidden = !state.can({ type: 'PLAY' });
   elements.elPauseButton.hidden = !state.can({ type: 'PAUSE' });
   elements.elVolumeButton.dataset.level =
