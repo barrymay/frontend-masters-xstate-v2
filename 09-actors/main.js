@@ -5,6 +5,13 @@ import { raise } from 'xstate/lib/actions';
 import { formatTime } from '../utils/formatTime';
 
 import elements from '../utils/elements';
+import { inspect } from '@xstate/inspect';
+
+
+inspect({
+  iframe: false,
+  url: 'https://stately.ai/viz?inspect',
+});
 
 function createFakeAudio(duration) {
   let currentTime = 0;
@@ -53,6 +60,7 @@ const invokeAudio = (ctx) => (sendBack, receive) => {
   receive((event) => {
     switch (event.type) {
       case 'PLAY':
+        console.log("PLAY!")
         audio.play();
         break;
       case 'PAUSE':
@@ -62,6 +70,10 @@ const invokeAudio = (ctx) => (sendBack, receive) => {
         break;
     }
   });
+
+  return () => {
+    console.log("CLEANUP EVENT LISTENING")
+  }
 };
 
 let songCounter = 0;
@@ -94,6 +106,14 @@ const playerMachine = createMachine({
       states: {
         loading: {
           tags: ['loading'],
+          invoke: {
+            id: 'getNextSong',
+            src: (context, event) => loadSong(),
+            onDone: {
+              target: 'ready.hist',
+              actions: 'assignSongData',
+            }
+          },
           // Instead of an external LOADED event,
           // invoke a promise that returns the song.
           // You can use the ready-made `loadSong` function.
@@ -101,6 +121,10 @@ const playerMachine = createMachine({
           // and transition to 'ready.hist'
         },
         ready: {
+          invoke: {
+            id: 'audio',
+            src: invokeAudio,
+          },
           // Invoke the audio callback (use `src: invokeAudio`)
           // Make sure to give this invocation an ID of 'audio'
           // so that it can receive events that this machine sends it
@@ -186,13 +210,13 @@ const playerMachine = createMachine({
   },
 }).withConfig({
   actions: {
-    assignSongData: assign({
-      title: (_, e) => e.data.title,
-      artist: (_, e) => e.data.artist,
-      duration: (ctx, e) => e.data.duration,
+    assignSongData: assign((context, e) => ({
+      title: e.data.title,
+      artist: e.data.artist,
+      duration: e.data.duration,
       elapsed: 0,
       likeStatus: 'unliked',
-    }),
+    })),
     likeSong: assign({
       likeStatus: 'liked',
     }),
@@ -214,8 +238,12 @@ const playerMachine = createMachine({
     // These actions should send events to that invoked audio actor:
     // playAudio should send 'PLAY'
     // pauseAudio should send 'PAUSE'
-    playAudio: () => {},
-    pauseAudio: () => {},
+    playAudio: send({type: 'PLAY'}, {
+        to: 'audio'
+      }),
+    pauseAudio:  send({type: 'PAUSE'}, {
+      to: 'audio'
+    }),
   },
   guards: {
     volumeWithinRange: (_, e) => {
@@ -224,7 +252,7 @@ const playerMachine = createMachine({
   },
 });
 
-const service = interpret(playerMachine).start();
+const service = interpret(playerMachine, {devTools: true}).start();
 window.service = service;
 
 elements.elPlayButton.addEventListener('click', () => {

@@ -5,7 +5,12 @@ import { createMachine, assign, interpret, send } from 'xstate';
 import elements from '../utils/elements';
 import { raise } from 'xstate/lib/actions';
 import { formatTime } from '../utils/formatTime';
+import { inspect } from '@xstate/inspect';
 
+inspect({
+  iframe: false,
+  url: 'https://stately.ai/viz?inspect',
+});
 const playerMachine = createMachine({
   context: {
     title: undefined,
@@ -28,7 +33,7 @@ const playerMachine = createMachine({
               // This will always go to the 'ready.playing' state
               // Instead, go to the most recent child of the 'ready' state
               // (Hint: target a history state!)
-              target: 'ready',
+              target: 'ready.hist',
             },
           },
         },
@@ -47,6 +52,9 @@ const playerMachine = createMachine({
                 PAUSE: { target: 'paused' },
               },
             },
+            hist: {
+              type: 'history',
+            }
             // Add a sibling history state here
           },
           always: {
@@ -57,6 +65,7 @@ const playerMachine = createMachine({
         finished: {
           type: 'final',
         },
+     
       },
       onDone: {
         target: '.loading',
@@ -139,7 +148,7 @@ const playerMachine = createMachine({
   },
 });
 
-const service = interpret(playerMachine).start();
+const service = interpret(playerMachine, {devTools: true}).start();
 window.service = service;
 
 elements.elPlayButton.addEventListener('click', () => {
